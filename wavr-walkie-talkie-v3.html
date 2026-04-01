@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>WAVR — Push To Talk</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0A0E1A;--card:#1A2236;--border:#2A3550;
+  --blue:#4A90E2;--green:#2ECC71;--red:#FF4136;--orange:#FF9500;
+  --text:#FFFFFF;--muted:#8090B0;--dim:#4A5A7A;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;justify-content:center;}
+.screen{width:100%;max-width:420px;min-height:100vh;display:flex;flex-direction:column;padding:28px 20px;}
+#app-screen{display:none;}
+.logo-row{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+.logo-icon{width:38px;height:38px;border-radius:50%;background:rgba(74,144,226,.15);border:1.5px solid var(--blue);display:flex;align-items:center;justify-content:center;font-size:20px;}
+.logo-text{font-size:24px;font-weight:800;letter-spacing:6px;}
+.logo-sub{font-size:11px;color:var(--blue);letter-spacing:3px;margin-bottom:28px;}
+.lbl{font-size:11px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+input[type=text]{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;padding:13px 16px;outline:none;margin-bottom:14px;transition:border-color .2s;}
+input[type=text]:focus{border-color:var(--blue);}
+input[type=text]::placeholder{color:var(--dim);}
+.btn{width:100%;padding:15px;border-radius:12px;border:1.5px solid;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;background:transparent;transition:all .15s;margin-bottom:10px;}
+.btn:active{transform:scale(.97);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-blue{border-color:var(--blue);color:var(--blue);}
+.btn-blue:hover:not(:disabled){background:rgba(74,144,226,.1);}
+.btn-green{border-color:var(--green);color:var(--green);}
+.btn-green:hover:not(:disabled){background:rgba(46,204,113,.1);}
+.btn-red{border-color:var(--red);color:var(--red);}
+.btn-red:hover:not(:disabled){background:rgba(255,65,54,.08);}
+.divider{display:flex;align-items:center;gap:12px;margin:4px 0 14px;font-size:12px;color:var(--dim);}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+#err{background:rgba(255,65,54,.1);border:1px solid rgba(255,65,54,.3);border-radius:8px;padding:12px 14px;font-size:13px;color:#FF7070;margin-bottom:12px;display:none;line-height:1.6;}
+#status-bar{background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.2);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--muted);margin-bottom:14px;display:none;line-height:1.6;text-align:center;}
+
+/* App */
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+.topbar-logo{font-size:18px;font-weight:800;letter-spacing:4px;}
+.badge{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;border:1px solid;transition:all .3s;}
+.badge.on{color:var(--green);border-color:rgba(46,204,113,.4);background:rgba(46,204,113,.08);}
+.badge.off{color:var(--orange);border-color:rgba(255,149,0,.4);background:rgba(255,149,0,.08);}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.dot.pulse{animation:pulse 1.2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+
+.chan-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;text-align:center;margin-bottom:14px;cursor:pointer;transition:border-color .2s;}
+.chan-box:hover{border-color:var(--blue);}
+.chan-id{font-size:26px;font-weight:800;letter-spacing:8px;margin-bottom:4px;}
+.chan-hint{font-size:11px;color:var(--dim);}
+
+.spk-bar{text-align:center;padding:10px 20px;border-radius:24px;font-size:14px;font-weight:600;margin-bottom:22px;border:1px solid transparent;transition:all .3s;min-height:42px;display:flex;align-items:center;justify-content:center;}
+.spk-bar.idle{color:var(--dim);}
+.spk-bar.me{color:var(--red);border-color:rgba(255,65,54,.4);background:rgba(255,65,54,.1);}
+.spk-bar.other{color:var(--orange);border-color:rgba(255,149,0,.4);background:rgba(255,149,0,.08);}
+
+.ptt-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:22px;}
+.rings{position:relative;width:220px;height:220px;display:flex;align-items:center;justify-content:center;}
+.ring{position:absolute;border-radius:50%;border:1.5px solid var(--blue);opacity:0;pointer-events:none;}
+.ring.go{animation:rexp .9s ease-out infinite;}
+.ring:nth-child(2){animation-delay:.3s;}
+.ring:nth-child(3){animation-delay:.6s;}
+@keyframes rexp{0%{width:168px;height:168px;opacity:.6}100%{width:218px;height:218px;opacity:0}}
+
+.ptt{width:160px;height:160px;border-radius:50%;border:2.5px solid var(--blue);background:rgba(74,144,226,.1);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;user-select:none;-webkit-user-select:none;transition:transform .08s,border-color .2s,background .2s;position:relative;z-index:1;touch-action:none;-webkit-tap-highlight-color:transparent;}
+.ptt.pressing{transform:scale(.93);}
+.ptt.tx{border-color:var(--red);background:rgba(255,65,54,.15);}
+.ptt.busy{border-color:var(--orange);background:rgba(255,149,0,.08);cursor:not-allowed;}
+.ptt-ico{font-size:44px;line-height:1;margin-bottom:2px;}
+.ptt-lbl{font-size:10px;font-weight:700;letter-spacing:2.5px;color:var(--blue);text-transform:uppercase;transition:color .2s;}
+.ptt.tx .ptt-lbl{color:var(--red);}
+.ptt.busy .ptt-lbl{color:var(--orange);}
+
+.waves{display:flex;align-items:flex-end;gap:3px;height:16px;margin-bottom:2px;}
+.wb{width:4px;border-radius:2px;background:var(--red);animation:wv .6s ease-in-out infinite;}
+.wb:nth-child(1){animation-delay:0s}.wb:nth-child(2){animation-delay:.1s}.wb:nth-child(3){animation-delay:.2s}.wb:nth-child(4){animation-delay:.1s}.wb:nth-child(5){animation-delay:0s}
+@keyframes wv{0%,100%{height:4px}50%{height:14px}}
+
+.cap{font-size:11px;color:var(--blue);letter-spacing:3px;text-transform:uppercase;font-weight:700;margin-top:10px;transition:color .2s;}
+
+.members{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;min-height:34px;}
+.chip{padding:5px 12px;background:var(--card);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.chip.spk{border-color:rgba(255,65,54,.5);color:var(--red);background:rgba(255,65,54,.08);}
+.cdot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+
+.foot{margin-top:auto;padding-top:12px;}
+.note{text-align:center;font-size:11px;color:var(--dim);padding:6px;line-height:1.6;margin-top:4px;}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--card);border:1px solid var(--border);border-radius:24px;padding:10px 20px;font-size:13px;color:var(--muted);transition:transform .3s;pointer-events:none;white-space:nowrap;z-index:999;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+#join-in{text-transform:uppercase;letter-spacing:5px;font-weight:700;font-size:18px;}
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div class="screen" id="setup-screen">
+  <div class="logo-row">
+    <div class="logo-icon">📻</div>
+    <div class="logo-text">WAVR</div>
+  </div>
+  <div class="logo-sub">Push-To-Talk</div>
+
+  <div class="lbl">Your callsign</div>
+  <input type="text" id="name-in" placeholder="e.g. Alpha, Bravo, Base..." maxlength="20">
+
+  <div id="status-bar"></div>
+  <div id="err"></div>
+
+  <button class="btn btn-blue" id="create-btn" onclick="doCreate()">Create new channel</button>
+  <div class="divider">or join existing</div>
+  <div class="lbl">Channel ID</div>
+  <input type="text" id="join-in" placeholder="XXXXXX" maxlength="6">
+  <button class="btn btn-green" id="join-btn" onclick="doJoin()">Join channel</button>
+</div>
+
+<!-- APP -->
+<div class="screen" id="app-screen">
+  <div class="topbar">
+    <div class="topbar-logo">WAVR</div>
+    <div class="badge off" id="badge">
+      <div class="dot pulse" id="bdot"></div>
+      <span id="blbl">Connecting</span>
+    </div>
+  </div>
+
+  <div class="chan-box" onclick="copyId()">
+    <div class="chan-id" id="cid-lbl">——</div>
+    <div class="chan-hint">Tap to copy &amp; share</div>
+  </div>
+
+  <div class="spk-bar idle" id="spk-bar">Channel clear</div>
+
+  <div class="ptt-wrap">
+    <div class="rings">
+      <div class="ring" id="r1"></div>
+      <div class="ring" id="r2"></div>
+      <div class="ring" id="r3"></div>
+      <div class="ptt" id="ptt">
+        <div id="ptt-ico" class="ptt-ico">🎙</div>
+        <div class="waves" id="waves" style="display:none">
+          <div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div>
+        </div>
+        <div class="ptt-lbl" id="ptt-lbl">Hold to talk</div>
+      </div>
+    </div>
+    <div class="cap" id="cap">HOLD TO TALK</div>
+  </div>
+
+  <div class="lbl" style="margin-bottom:8px">In channel</div>
+  <div class="members" id="members">
+    <div class="chip" id="my-chip"><div class="cdot"></div><span id="my-lbl">You</span></div>
+  </div>
+
+  <div class="foot">
+    <button class="btn btn-red" onclick="doLeave()">Leave channel</button>
+    <div class="note">WebRTC peer-to-peer · end-to-end encrypted</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- PeerJS — handles WebRTC signalling automatically via a public server -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// ── State ─────────────────────────────────────────────
+let myPeer = null;       // PeerJS instance
+let myName = '';
+let channelId = '';
+let localStream = null;
+let isTx = false;
+let blocked = false;
+let speakerConn = null;  // data connection ID of current speaker
+
+// connections: connId -> { call, dataConn, name, speaking }
+let conns = {};
+
+// ── UI helpers ────────────────────────────────────────
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+function showErr(m){
+  const e=document.getElementById('err');
+  e.innerHTML=m; e.style.display='block';
+  setTimeout(()=>e.style.display='none',6000);
+}
+function showStatus(m){
+  const s=document.getElementById('status-bar');
+  s.textContent=m; s.style.display='block';
+}
+function hideStatus(){
+  document.getElementById('status-bar').style.display='none';
+}
+function toast(m,d=2500){
+  const t=document.getElementById('toast');
+  t.textContent=m; t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>t.classList.remove('show'),d);
+}
+function copyId(){
+  navigator.clipboard?.writeText(channelId).then(()=>toast('Channel ID copied!'));
+}
+
+// ── App / Setup screens ───────────────────────────────
+function showApp(){
+  document.getElementById('setup-screen').style.display='none';
+  document.getElementById('app-screen').style.display='flex';
+  document.getElementById('cid-lbl').textContent=channelId;
+  document.getElementById('my-lbl').textContent=myName+' (you)';
+}
+function showSetup(){
+  document.getElementById('app-screen').style.display='none';
+  document.getElementById('setup-screen').style.display='flex';
+}
+
+// ── Connection badge ──────────────────────────────────
+function setConn(on){
+  const b=document.getElementById('badge');
+  const d=document.getElementById('bdot');
+  b.className='badge '+(on?'on':'off');
+  d.className='dot'+(on?'':' pulse');
+  document.getElementById('blbl').textContent=on?'Connected':'Connecting…';
+}
+
+// ── PTT UI ────────────────────────────────────────────
+function setPTT(state){
+  const btn=document.getElementById('ptt');
+  const ico=document.getElementById('ptt-ico');
+  const lbl=document.getElementById('ptt-lbl');
+  const cap=document.getElementById('cap');
+  const wv=document.getElementById('waves');
+  const rings=document.querySelectorAll('.ring');
+
+  btn.className='ptt'+(state==='tx'?' tx':state==='busy'?' busy':'');
+
+  if(state==='tx'){
+    ico.style.display='none'; wv.style.display='flex';
+    lbl.textContent='Transmitting'; cap.textContent='TRANSMITTING'; cap.style.color='var(--red)';
+    rings.forEach(r=>{r.style.borderColor='var(--red)';r.classList.add('go');});
+  } else if(state==='busy'){
+    ico.style.display='block'; ico.textContent='🔇'; wv.style.display='none';
+    lbl.textContent='Channel busy'; cap.textContent='CHANNEL BUSY'; cap.style.color='var(--orange)';
+    rings.forEach(r=>{r.style.borderColor='var(--orange)';r.classList.remove('go');});
+  } else {
+    ico.style.display='block'; ico.textContent='🎙'; wv.style.display='none';
+    lbl.textContent='Hold to talk'; cap.textContent='HOLD TO TALK'; cap.style.color='var(--blue)';
+    rings.forEach(r=>{r.style.borderColor='var(--blue)';r.classList.remove('go');});
+  }
+}
+function setSpeaker(type,name=''){
+  const el=document.getElementById('spk-bar');
+  el.className='spk-bar';
+  if(type==='me'){el.classList.add('me');el.textContent='🎙 You are speaking';}
+  else if(type==='other'){el.classList.add('other');el.textContent='🔊 '+name+' is speaking';}
+  else{el.classList.add('idle');el.textContent='Channel clear';}
+}
+function renderMembers(){
+  const row=document.getElementById('members');
+  row.querySelectorAll('.chip:not(#my-chip)').forEach(e=>e.remove());
+  const mc=document.getElementById('my-chip');
+  mc.className='chip'+(isTx?' spk':'');
+  Object.values(conns).forEach(c=>{
+    const chip=document.createElement('div');
+    chip.className='chip'+(c.speaking?' spk':'');
+    chip.innerHTML='<div class="cdot"></div><span>'+esc(c.name||'Peer')+'</span>';
+    row.appendChild(chip);
+  });
+}
+
+// ── Mic ───────────────────────────────────────────────
+async function getMic(){
+  localStream=await navigator.mediaDevices.getUserMedia({
+    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+    video:false
+  });
+  // Start muted — PTT only
+  localStream.getAudioTracks().forEach(t=>t.enabled=false);
+  return localStream;
+}
+
+// ── PeerJS ID scheme ──────────────────────────────────
+// Host peer ID = "wavr-CHANNELID"
+// Joiner peer ID = "wavr-CHANNELID-RANDOMSUFFIX"
+function hostId(cid){ return 'wavr-'+cid; }
+function joinerId(cid){ return 'wavr-'+cid+'-'+Math.random().toString(36).slice(2,7); }
+
+// ── Create channel (become host) ─────────────────────
+async function doCreate(){
+  const name=document.getElementById('name-in').value.trim();
+  if(!name){showErr('Enter a callsign first.');return;}
+  myName=name;
+  channelId=rand6();
+
+  setBtns(false);
+  showStatus('Requesting microphone…');
+
+  try{
+    await getMic();
+  } catch(e){
+    setBtns(true); hideStatus();
+    showErr('Microphone denied. Tap the 🔒 icon in your browser address bar → allow mic → try again.');
+    return;
+  }
+
+  showStatus('Connecting…');
+
+  myPeer=new Peer(hostId(channelId),{debug:0});
+
+  myPeer.on('open', id=>{
+    hideStatus();
+    showApp();
+    setConn(true);
+    toast('Channel created! Share the ID 👆');
+  });
+
+  // Someone calls us (they initiate audio call)
+  myPeer.on('call', call=>{
+    call.answer(localStream);
+    const rid=call.peer;
+    if(!conns[rid]) conns[rid]={name:'',speaking:false};
+    conns[rid].call=call;
+    call.on('stream', remoteStream=>playRemote(rid,remoteStream));
+    call.on('close',()=>peerLeft(rid));
+    call.on('error',()=>peerLeft(rid));
+  });
+
+  // Someone opens a data channel to us
+  myPeer.on('connection', dc=>{
+    const rid=dc.peer;
+    if(!conns[rid]) conns[rid]={name:'',speaking:false};
+    conns[rid].dataConn=dc;
+    setupDataConn(dc,rid);
+  });
+
+  myPeer.on('error', e=>{
+    if(e.type==='unavailable-id'){
+      showErr('Channel ID already taken. Try a different one.');
+      doLeave();
+    } else {
+      toast('Connection error: '+e.type);
+    }
+  });
+}
+
+// ── Join channel ──────────────────────────────────────
+async function doJoin(){
+  const name=document.getElementById('name-in').value.trim();
+  const cid=document.getElementById('join-in').value.trim().toUpperCase();
+  if(!name){showErr('Enter a callsign first.');return;}
+  if(!cid||cid.length<4){showErr('Enter the channel ID.');return;}
+  myName=name; channelId=cid;
+
+  setBtns(false);
+  showStatus('Requesting microphone…');
+
+  try{
+    await getMic();
+  } catch(e){
+    setBtns(true); hideStatus();
+    showErr('Microphone denied. Tap the 🔒 icon in your browser address bar → allow mic → try again.');
+    return;
+  }
+
+  showStatus('Joining channel…');
+
+  myPeer=new Peer(joinerId(cid),{debug:0});
+
+  myPeer.on('open', id=>{
+    // Connect to host
+    connectToHost();
+  });
+
+  myPeer.on('call', call=>{
+    call.answer(localStream);
+    const rid=call.peer;
+    if(!conns[rid]) conns[rid]={name:'',speaking:false};
+    conns[rid].call=call;
+    call.on('stream', remoteStream=>playRemote(rid,remoteStream));
+    call.on('close',()=>peerLeft(rid));
+  });
+
+  myPeer.on('connection', dc=>{
+    const rid=dc.peer;
+    if(!conns[rid]) conns[rid]={name:'',speaking:false};
+    conns[rid].dataConn=dc;
+    setupDataConn(dc,rid);
+  });
+
+  myPeer.on('error', e=>{
+    if(e.type==='peer-unavailable'){
+      setBtns(true); hideStatus();
+      showErr('Channel "'+cid+'" not found. Make sure the host has created it and is online.');
+    } else {
+      toast('Error: '+e.type);
+    }
+  });
+}
+
+function connectToHost(){
+  const hid=hostId(channelId);
+
+  // 1. Data connection — for name + PTT signals
+  const dc=myPeer.connect(hid,{reliable:true});
+  if(!conns[hid]) conns[hid]={name:'',speaking:false};
+  conns[hid].dataConn=dc;
+  setupDataConn(dc,hid);
+
+  dc.on('open',()=>{
+    // 2. Audio call
+    const call=myPeer.call(hid,localStream);
+    conns[hid].call=call;
+    call.on('stream', remoteStream=>playRemote(hid,remoteStream));
+    call.on('close',()=>peerLeft(hid));
+
+    hideStatus();
+    showApp();
+    setConn(true);
+    toast('Joined! Hold the button to talk.');
+  });
+
+  dc.on('error',()=>{
+    setBtns(true); hideStatus();
+    showErr('Could not reach host. Make sure they have the channel open.');
+  });
+}
+
+// ── Data channel ──────────────────────────────────────
+function setupDataConn(dc, rid){
+  dc.on('open',()=>{
+    dc.send(JSON.stringify({t:'name',v:myName}));
+    renderMembers();
+  });
+  dc.on('data', raw=>{
+    try{
+      const m=JSON.parse(raw);
+      if(m.t==='name'){
+        conns[rid].name=m.v;
+        renderMembers();
+        toast((m.v||'Someone')+' joined');
+      } else if(m.t==='ptt_on'){
+        conns[rid].speaking=true;
+        speakerConn=rid; blocked=true;
+        setSpeaker('other', conns[rid].name||'Peer');
+        setPTT('busy'); renderMembers();
+      } else if(m.t==='ptt_off'){
+        conns[rid].speaking=false;
+        if(speakerConn===rid){
+          speakerConn=null; blocked=false;
+          if(!isTx){setSpeaker('idle');setPTT('idle');}
+          renderMembers();
+        }
+      }
+    }catch(_){}
+  });
+  dc.on('close',()=>peerLeft(rid));
+}
+
+// ── Remote audio ──────────────────────────────────────
+function playRemote(rid, stream){
+  // Reuse or create audio element
+  let audio=document.getElementById('audio-'+rid);
+  if(!audio){
+    audio=document.createElement('audio');
+    audio.id='audio-'+rid;
+    audio.autoplay=true;
+    audio.playsInline=true;
+    document.body.appendChild(audio);
+  }
+  audio.srcObject=stream;
+  // Force play — required on mobile
+  audio.play().catch(()=>{
+    // If autoplay blocked, user gesture needed — show toast
+    toast('Tap anywhere to enable audio',3000);
+    document.addEventListener('click',()=>audio.play(),{once:true});
+  });
+}
+
+// ── Peer left ─────────────────────────────────────────
+function peerLeft(rid){
+  if(!conns[rid]) return;
+  const name=conns[rid].name||'Someone';
+  try{conns[rid].call?.close();}catch(_){}
+  try{conns[rid].dataConn?.close();}catch(_){}
+  const el=document.getElementById('audio-'+rid);
+  if(el){el.srcObject=null;el.remove();}
+  if(speakerConn===rid){speakerConn=null;blocked=false;setSpeaker('idle');setPTT('idle');}
+  delete conns[rid];
+  renderMembers();
+  toast(name+' left');
+}
+
+// ── PTT ───────────────────────────────────────────────
+function broadcastData(msg){
+  Object.values(conns).forEach(c=>{
+    if(c.dataConn?.open) c.dataConn.send(JSON.stringify(msg));
+  });
+}
+
+function pttPress(){
+  if(blocked||isTx||!localStream) return;
+  isTx=true;
+  localStream.getAudioTracks().forEach(t=>t.enabled=true);
+  broadcastData({t:'ptt_on'});
+  setPTT('tx'); setSpeaker('me'); renderMembers();
+}
+function pttRelease(){
+  if(!isTx) return;
+  isTx=false;
+  localStream.getAudioTracks().forEach(t=>t.enabled=false);
+  broadcastData({t:'ptt_off'});
+  setPTT('idle'); setSpeaker('idle'); renderMembers();
+}
+
+// ── Leave ─────────────────────────────────────────────
+function doLeave(){
+  if(isTx) pttRelease();
+  Object.keys(conns).forEach(peerLeft);
+  myPeer?.destroy(); myPeer=null;
+  localStream?.getTracks().forEach(t=>t.stop()); localStream=null;
+  conns={}; isTx=false; blocked=false; speakerConn=null;
+  document.querySelectorAll('audio[id^=audio-]').forEach(a=>{a.srcObject=null;a.remove();});
+  setBtns(true); showSetup();
+}
+
+// ── Helpers ───────────────────────────────────────────
+function rand6(){
+  const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
+function setBtns(on){
+  document.querySelectorAll('.btn').forEach(b=>b.disabled=!on);
+}
+
+// ── PTT button events ─────────────────────────────────
+const pttEl=document.getElementById('ptt');
+pttEl.addEventListener('mousedown',e=>{e.preventDefault();pttPress();});
+pttEl.addEventListener('mouseup',e=>{e.preventDefault();pttRelease();});
+pttEl.addEventListener('mouseleave',()=>{if(isTx)pttRelease();});
+pttEl.addEventListener('touchstart',e=>{e.preventDefault();pttPress();},{passive:false});
+pttEl.addEventListener('touchend',e=>{e.preventDefault();pttRelease();},{passive:false});
+pttEl.addEventListener('touchcancel',e=>{e.preventDefault();pttRelease();},{passive:false});
+
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&!e.repeat&&document.getElementById('app-screen').style.display!=='none'){
+    e.preventDefault();pttPress();
+  }
+});
+document.addEventListener('keyup',e=>{
+  if(e.code==='Space'&&document.getElementById('app-screen').style.display!=='none'){
+    e.preventDefault();pttRelease();
+  }
+});
+</script>
+</body>
+</html>
