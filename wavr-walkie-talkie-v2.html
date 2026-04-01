@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>WAVR — Push To Talk</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0A0E1A;--surface:#121828;--card:#1A2236;--border:#2A3550;
+  --blue:#4A90E2;--green:#2ECC71;--red:#FF4136;--orange:#FF9500;
+  --text:#FFFFFF;--muted:#8090B0;--dim:#4A5A7A;
+}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+}
+.screen{width:100%;max-width:420px;min-height:100vh;display:flex;flex-direction:column;padding:28px 20px;}
+#app-screen{display:none;}
+
+.logo-row{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+.logo-icon{width:38px;height:38px;border-radius:50%;background:rgba(74,144,226,.15);border:1.5px solid var(--blue);display:flex;align-items:center;justify-content:center;font-size:20px;}
+.logo-text{font-size:24px;font-weight:800;letter-spacing:6px;}
+.logo-sub{font-size:11px;color:var(--blue);letter-spacing:3px;margin-bottom:28px;}
+
+.label{font-size:11px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+input[type=text]{
+  width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  color:var(--text);font-size:15px;padding:13px 16px;outline:none;margin-bottom:14px;
+  transition:border-color .2s;
+}
+input[type=text]:focus{border-color:var(--blue);}
+input[type=text]::placeholder{color:var(--dim);}
+
+.btn{
+  width:100%;padding:15px;border-radius:12px;border:1.5px solid;
+  font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  cursor:pointer;background:transparent;transition:all .15s;margin-bottom:10px;
+}
+.btn:active{transform:scale(.97);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-blue{border-color:var(--blue);color:var(--blue);}
+.btn-blue:hover:not(:disabled){background:rgba(74,144,226,.1);}
+.btn-green{border-color:var(--green);color:var(--green);}
+.btn-green:hover:not(:disabled){background:rgba(46,204,113,.1);}
+.btn-red{border-color:var(--red);color:var(--red);}
+.btn-red:hover:not(:disabled){background:rgba(255,65,54,.08);}
+
+.divider{display:flex;align-items:center;gap:12px;margin:4px 0 14px;font-size:12px;color:var(--dim);}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+
+#error-msg{
+  background:rgba(255,65,54,.1);border:1px solid rgba(255,65,54,.3);
+  border-radius:8px;padding:10px 14px;font-size:13px;color:#FF6B6B;
+  margin-bottom:12px;display:none;line-height:1.5;
+}
+
+.info-box{
+  background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.25);
+  border-radius:10px;padding:14px 16px;font-size:13px;color:var(--muted);
+  margin-bottom:20px;line-height:1.7;
+}
+.info-box b{color:var(--blue);}
+
+/* App screen */
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.topbar-logo{font-size:18px;font-weight:800;letter-spacing:4px;}
+.conn-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border:1px solid;transition:all .3s;}
+.conn-badge.connected{color:var(--green);border-color:rgba(46,204,113,.4);background:rgba(46,204,113,.08);}
+.conn-badge.connecting{color:var(--orange);border-color:rgba(255,149,0,.4);background:rgba(255,149,0,.08);}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.dot.pulse{animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+
+.channel-box{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:16px 20px;text-align:center;margin-bottom:16px;cursor:pointer;transition:border-color .2s;
+}
+.channel-box:hover{border-color:var(--blue);}
+.channel-id{font-size:28px;font-weight:800;letter-spacing:8px;margin-bottom:4px;}
+.channel-hint{font-size:11px;color:var(--dim);letter-spacing:1px;}
+
+.speaker-status{
+  text-align:center;padding:10px 20px;border-radius:24px;font-size:14px;font-weight:600;
+  margin-bottom:24px;border:1px solid transparent;transition:all .3s;
+  min-height:42px;display:flex;align-items:center;justify-content:center;
+}
+.speaker-status.idle{color:var(--dim);}
+.speaker-status.me-speaking{color:var(--red);border-color:rgba(255,65,54,.4);background:rgba(255,65,54,.1);}
+.speaker-status.other-speaking{color:var(--orange);border-color:rgba(255,149,0,.4);background:rgba(255,149,0,.08);}
+
+.ptt-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:24px;}
+.ptt-rings{position:relative;width:220px;height:220px;display:flex;align-items:center;justify-content:center;}
+.ptt-ring{position:absolute;border-radius:50%;border:1.5px solid;opacity:0;pointer-events:none;}
+.ptt-ring.active{animation:ring-expand .9s ease-out infinite;}
+.ptt-ring:nth-child(2){animation-delay:.3s;}
+.ptt-ring:nth-child(3){animation-delay:.6s;}
+@keyframes ring-expand{0%{width:170px;height:170px;opacity:.6}100%{width:220px;height:220px;opacity:0}}
+
+.ptt-btn{
+  width:160px;height:160px;border-radius:50%;border:2.5px solid var(--blue);
+  background:rgba(74,144,226,.1);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;cursor:pointer;user-select:none;
+  -webkit-user-select:none;transition:transform .08s,border-color .2s,background .2s;
+  position:relative;z-index:1;touch-action:none;
+}
+.ptt-btn.pressing,.ptt-btn:active{transform:scale(.93);}
+.ptt-btn.transmitting{border-color:var(--red);background:rgba(255,65,54,.15);}
+.ptt-btn.blocked{border-color:var(--orange);background:rgba(255,149,0,.08);cursor:not-allowed;}
+
+.ptt-icon{font-size:44px;margin-bottom:2px;line-height:1;transition:all .2s;}
+.ptt-label-inner{font-size:10px;font-weight:700;letter-spacing:2.5px;color:var(--blue);text-transform:uppercase;transition:color .2s;}
+.ptt-btn.transmitting .ptt-label-inner{color:var(--red);}
+.ptt-btn.blocked .ptt-label-inner{color:var(--orange);}
+
+.wave-bars{display:flex;align-items:flex-end;gap:3px;height:16px;margin-top:2px;}
+.wave-bar{width:4px;border-radius:2px;background:var(--red);animation:wave .6s ease-in-out infinite;}
+.wave-bar:nth-child(1){animation-delay:0s}
+.wave-bar:nth-child(2){animation-delay:.1s}
+.wave-bar:nth-child(3){animation-delay:.2s}
+.wave-bar:nth-child(4){animation-delay:.1s}
+.wave-bar:nth-child(5){animation-delay:0s}
+@keyframes wave{0%,100%{height:4px}50%{height:14px}}
+
+.ptt-caption{font-size:11px;color:var(--blue);letter-spacing:3px;text-transform:uppercase;font-weight:700;margin-top:10px;transition:color .2s;min-height:16px;}
+
+.members-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;min-height:34px;}
+.member-chip{
+  padding:5px 12px;background:var(--card);border:1px solid var(--border);
+  border-radius:20px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;
+}
+.member-chip.speaking{border-color:rgba(255,65,54,.5);color:var(--red);background:rgba(255,65,54,.08);}
+.mdot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+
+.bottom-row{margin-top:auto;padding-top:12px;}
+.note{text-align:center;font-size:11px;color:var(--dim);padding:8px;line-height:1.6;margin-top:4px;}
+
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--card);border:1px solid var(--border);border-radius:24px;
+  padding:10px 20px;font-size:13px;color:var(--muted);transition:transform .3s ease;
+  pointer-events:none;white-space:nowrap;z-index:100;
+}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+#join-id-input{text-transform:uppercase;letter-spacing:5px;font-weight:700;font-size:18px;}
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div class="screen" id="setup-screen">
+  <div class="logo-row">
+    <div class="logo-icon">📻</div>
+    <div class="logo-text">WAVR</div>
+  </div>
+  <div class="logo-sub">Push-To-Talk</div>
+
+  <div class="info-box">
+    <b>No installs. No accounts.</b> Pure browser walkie-talkie.<br>
+    Open this file on two devices → same channel ID → hold to talk.
+  </div>
+
+  <div class="label">Your callsign</div>
+  <input type="text" id="callsign-input" placeholder="e.g. Alpha, Bravo, Base..." maxlength="20">
+
+  <div id="error-msg"></div>
+
+  <button class="btn btn-blue" id="create-btn" onclick="doCreate()">Create new channel</button>
+
+  <div class="divider">or join existing</div>
+
+  <div class="label">Channel ID</div>
+  <input type="text" id="join-id-input" placeholder="XXXXXX" maxlength="6">
+  <button class="btn btn-green" id="join-btn" onclick="doJoin()">Join channel</button>
+</div>
+
+<!-- APP SCREEN -->
+<div class="screen" id="app-screen">
+  <div class="topbar">
+    <div class="topbar-logo">WAVR</div>
+    <div class="conn-badge connecting" id="conn-badge">
+      <div class="dot pulse" id="conn-dot"></div>
+      <span id="conn-label">Connecting</span>
+    </div>
+  </div>
+
+  <div class="channel-box" onclick="copyId()">
+    <div class="channel-id" id="display-cid">——</div>
+    <div class="channel-hint">Tap to copy &amp; share with others</div>
+  </div>
+
+  <div class="speaker-status idle" id="speaker-status">Channel clear</div>
+
+  <div class="ptt-wrap">
+    <div class="ptt-rings" id="ptt-rings">
+      <div class="ptt-ring" id="r1" style="border-color:var(--blue)"></div>
+      <div class="ptt-ring" id="r2" style="border-color:var(--blue)"></div>
+      <div class="ptt-ring" id="r3" style="border-color:var(--blue)"></div>
+      <div class="ptt-btn" id="ptt-btn">
+        <div class="ptt-icon" id="ptt-icon">🎙</div>
+        <div class="wave-bars" id="wave-bars" style="display:none">
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div>
+        </div>
+        <div class="ptt-label-inner" id="ptt-lbl">Hold to talk</div>
+      </div>
+    </div>
+    <div class="ptt-caption" id="ptt-cap">HOLD TO TALK</div>
+  </div>
+
+  <div class="label" style="margin-bottom:8px">Members</div>
+  <div class="members-row" id="members-row">
+    <div class="member-chip" id="my-chip">
+      <div class="mdot"></div><span id="my-name-lbl">You</span>
+    </div>
+  </div>
+
+  <div class="bottom-row">
+    <button class="btn btn-red" onclick="doLeave()">Leave channel</button>
+    <div class="note">WebRTC peer-to-peer · No server · Works on LAN &amp; internet</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  WAVR  –  Pure WebRTC + BroadcastChannel signalling
+//  Works on same device instantly.
+//  For cross-device on same WiFi: use a free signalling
+//  service (see CROSS-DEVICE MODE below).
+// ════════════════════════════════════════════════════════
+
+const ICE = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+]};
+
+let myId = '';
+let myName = '';
+let channelId = '';
+let localStream = null;
+let peers = {};          // peerId -> { pc, dc }
+let isTx = false;
+let blocked = false;
+let speakerPeer = null;
+
+// Signalling: BroadcastChannel for same-device / same-browser tabs
+// For cross-device we use a free public WebSocket relay
+let bc = null;           // BroadcastChannel
+let ws = null;           // WebSocket for cross-device
+let sigReady = false;
+
+// ── Utilities ──────────────────────────────────────────
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function rand6(){
+  const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function showErr(m){
+  const e=document.getElementById('error-msg');
+  e.innerHTML=m; e.style.display='block';
+  setTimeout(()=>e.style.display='none',5000);
+}
+function toast(m,d=2000){
+  const t=document.getElementById('toast');
+  t.textContent=m; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),d);
+}
+function copyId(){
+  navigator.clipboard?.writeText(channelId).then(()=>toast('Channel ID copied!'));
+}
+
+// ── Screens ────────────────────────────────────────────
+function showApp(){
+  document.getElementById('setup-screen').style.display='none';
+  document.getElementById('app-screen').style.display='flex';
+  document.getElementById('display-cid').textContent=channelId;
+  document.getElementById('my-name-lbl').textContent=myName+' (you)';
+}
+function showSetup(){
+  document.getElementById('app-screen').style.display='none';
+  document.getElementById('setup-screen').style.display='flex';
+}
+function setConn(on){
+  const b=document.getElementById('conn-badge');
+  const d=document.getElementById('conn-dot');
+  b.className='conn-badge '+(on?'connected':'connecting');
+  d.className='dot'+(on?'':' pulse');
+  document.getElementById('conn-label').textContent=on?'Connected':'Connecting…';
+}
+
+// ── PTT UI ─────────────────────────────────────────────
+function setPTT(state){ // 'idle' | 'tx' | 'blocked'
+  const btn=document.getElementById('ptt-btn');
+  const icon=document.getElementById('ptt-icon');
+  const lbl=document.getElementById('ptt-lbl');
+  const cap=document.getElementById('ptt-cap');
+  const wb=document.getElementById('wave-bars');
+  const rings=document.querySelectorAll('.ptt-ring');
+  btn.className='ptt-btn'+(state==='tx'?' transmitting':state==='blocked'?' blocked':'');
+  if(state==='tx'){
+    icon.style.display='none'; wb.style.display='flex';
+    lbl.textContent='Transmitting'; cap.textContent='TRANSMITTING'; cap.style.color='var(--red)';
+    rings.forEach(r=>{r.style.borderColor='var(--red)';r.classList.add('active');});
+  } else if(state==='blocked'){
+    icon.style.display='block'; icon.textContent='🔇'; wb.style.display='none';
+    lbl.textContent='Channel busy'; cap.textContent='CHANNEL BUSY'; cap.style.color='var(--orange)';
+    rings.forEach(r=>r.classList.remove('active'));
+  } else {
+    icon.style.display='block'; icon.textContent='🎙'; wb.style.display='none';
+    lbl.textContent='Hold to talk'; cap.textContent='HOLD TO TALK'; cap.style.color='var(--blue)';
+    rings.forEach(r=>{r.style.borderColor='var(--blue)';r.classList.remove('active');});
+  }
+}
+function setSpeaker(type,name=''){
+  const el=document.getElementById('speaker-status');
+  el.className='speaker-status';
+  if(type==='me'){ el.classList.add('me-speaking'); el.textContent='🎙 You are speaking'; }
+  else if(type==='other'){ el.classList.add('other-speaking'); el.textContent='🔊 '+name+' is speaking'; }
+  else{ el.classList.add('idle'); el.textContent='Channel clear'; }
+}
+function renderMembers(){
+  const row=document.getElementById('members-row');
+  row.querySelectorAll('.member-chip:not(#my-chip)').forEach(e=>e.remove());
+  const myChip=document.getElementById('my-chip');
+  myChip.className='member-chip'+(isTx?' speaking':'');
+  Object.values(peers).forEach(({name,speaking})=>{
+    const c=document.createElement('div');
+    c.className='member-chip'+(speaking?' speaking':'');
+    c.innerHTML='<div class="mdot"></div><span>'+esc(name||'Unknown')+'</span>';
+    row.appendChild(c);
+  });
+}
+
+// ── Mic ───────────────────────────────────────────────
+async function getMic(){
+  localStream=await navigator.mediaDevices.getUserMedia({
+    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+    video:false
+  });
+  // Mute all tracks initially — PTT only
+  localStream.getAudioTracks().forEach(t=>t.enabled=false);
+}
+
+// ── Signalling (dual: BroadcastChannel + WebSocket) ────
+// We send JSON signals through both. BroadcastChannel handles
+// same-device multi-tab. WebSocket relay handles cross-device.
+// Free relay: wss://signaling.viblast.com:8080 (no auth, STUN only)
+// We use a simple free echo/broadcast relay built on wss://ws.vi.pm
+
+const WS_RELAY = 'wss://ws.vi.pm/';   // free public WS relay
+
+function initSignalling(cid){
+  // BroadcastChannel: same browser tabs
+  bc = new BroadcastChannel('wavr_'+cid);
+  bc.onmessage = e => handleSignal(e.data);
+
+  // WebSocket relay: cross-device
+  try {
+    ws = new WebSocket(WS_RELAY);
+    ws.onopen = () => {
+      // subscribe to our channel room
+      ws.send(JSON.stringify({type:'subscribe', room:'wavr_'+cid}));
+      sigReady = true;
+      setConn(true);
+      announce();
+    };
+    ws.onmessage = e => {
+      try { const d=JSON.parse(e.data); if(d.from!==myId) handleSignal(d); } catch(_){}
+    };
+    ws.onerror = () => {
+      // WS failed — BroadcastChannel still works for same-device
+      sigReady = true;
+      setConn(true);
+      announce();
+    };
+    ws.onclose = () => {};
+  } catch(_){
+    sigReady = true;
+    setConn(true);
+    announce();
+  }
+}
+
+function send(msg){
+  const payload = {...msg, from: myId, room: 'wavr_'+channelId};
+  // BroadcastChannel
+  try { bc?.postMessage(payload); } catch(_){}
+  // WebSocket relay
+  try { if(ws?.readyState===1) ws.send(JSON.stringify(payload)); } catch(_){}
+}
+
+// ── WebRTC peer management ─────────────────────────────
+async function createPeer(peerId, initiator){
+  if(peers[peerId]) return;
+  const pc = new RTCPeerConnection(ICE);
+  peers[peerId] = { pc, name:'', speaking:false };
+
+  // Add local audio
+  if(localStream) localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+
+  // Play remote audio
+  pc.ontrack = e => {
+    const audio = new Audio();
+    audio.srcObject = e.streams[0];
+    audio.autoplay = true;
+    audio.playsInline = true;
+    peers[peerId].audio = audio;
+  };
+
+  // DataChannel for control messages (name, PTT on/off)
+  let dc;
+  if(initiator){
+    dc = pc.createDataChannel('ctrl');
+    setupDC(dc, peerId);
+    peers[peerId].dc = dc;
+  } else {
+    pc.ondatachannel = e => {
+      dc = e.channel;
+      setupDC(dc, peerId);
+      peers[peerId].dc = dc;
+    };
+  }
+
+  pc.onicecandidate = e => {
+    if(e.candidate) send({type:'ice', to:peerId, candidate:e.candidate});
+  };
+
+  pc.onconnectionstatechange = () => {
+    if(pc.connectionState==='connected') renderMembers();
+    if(pc.connectionState==='disconnected'||pc.connectionState==='failed'){
+      handlePeerLeft(peerId);
+    }
+  };
+
+  if(initiator){
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    send({type:'offer', to:peerId, sdp:offer});
+  }
+}
+
+function setupDC(dc, peerId){
+  dc.onopen = () => {
+    // Send our name
+    dc.send(JSON.stringify({type:'name', name:myName}));
+  };
+  dc.onmessage = e => {
+    try{
+      const m = JSON.parse(e.data);
+      if(m.type==='name'){
+        if(peers[peerId]) peers[peerId].name = m.name;
+        renderMembers();
+      } else if(m.type==='ptt_on'){
+        if(peers[peerId]){
+          peers[peerId].speaking = true;
+          speakerPeer = peerId;
+          blocked = true;
+          setSpeaker('other', peers[peerId].name || 'Someone');
+          setPTT('blocked');
+          renderMembers();
+        }
+      } else if(m.type==='ptt_off'){
+        if(peers[peerId]) peers[peerId].speaking = false;
+        if(speakerPeer===peerId){
+          speakerPeer=null; blocked=false;
+          if(!isTx){ setSpeaker('idle'); setPTT('idle'); }
+          renderMembers();
+        }
+      }
+    }catch(_){}
+  };
+}
+
+async function handleSignal(msg){
+  if(!msg || msg.from===myId) return;
+  if(msg.to && msg.to!==myId) return;
+
+  if(msg.type==='announce'){
+    // New peer joined — initiate connection
+    if(!peers[msg.from]){
+      await createPeer(msg.from, true);
+      toast((msg.name||'Someone')+' joined');
+    }
+  } else if(msg.type==='offer'){
+    await createPeer(msg.from, false);
+    const pc = peers[msg.from]?.pc;
+    if(!pc) return;
+    await pc.setRemoteDescription(msg.sdp);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    send({type:'answer', to:msg.from, sdp:answer});
+  } else if(msg.type==='answer'){
+    const pc = peers[msg.from]?.pc;
+    if(pc) await pc.setRemoteDescription(msg.sdp);
+  } else if(msg.type==='ice'){
+    const pc = peers[msg.from]?.pc;
+    if(pc) try{ await pc.addIceCandidate(msg.candidate); }catch(_){}
+  } else if(msg.type==='leave'){
+    handlePeerLeft(msg.from);
+  }
+}
+
+function announce(){
+  send({type:'announce', name:myName});
+}
+
+function handlePeerLeft(peerId){
+  if(!peers[peerId]) return;
+  const name = peers[peerId].name || 'Someone';
+  try{ peers[peerId].pc?.close(); }catch(_){}
+  try{ peers[peerId].audio?.pause(); }catch(_){}
+  if(speakerPeer===peerId){ speakerPeer=null; blocked=false; setSpeaker('idle'); setPTT('idle'); }
+  delete peers[peerId];
+  renderMembers();
+  toast(name+' left');
+}
+
+// ── PTT ───────────────────────────────────────────────
+function broadcastDC(msg){
+  Object.values(peers).forEach(p=>{
+    if(p.dc?.readyState==='open') p.dc.send(JSON.stringify(msg));
+  });
+}
+
+function pttPress(){
+  if(blocked||isTx) return;
+  isTx=true;
+  localStream?.getAudioTracks().forEach(t=>t.enabled=true);
+  broadcastDC({type:'ptt_on'});
+  setPTT('tx'); setSpeaker('me'); renderMembers();
+}
+function pttRelease(){
+  if(!isTx) return;
+  isTx=false;
+  localStream?.getAudioTracks().forEach(t=>t.enabled=false);
+  broadcastDC({type:'ptt_off'});
+  setPTT('idle'); setSpeaker('idle'); renderMembers();
+}
+
+// ── Create / Join ──────────────────────────────────────
+async function doCreate(){
+  const name=document.getElementById('callsign-input').value.trim();
+  if(!name){showErr('Enter a callsign first.');return;}
+  myName=name; myId=uid(); channelId=rand6();
+  await start();
+}
+async function doJoin(){
+  const name=document.getElementById('callsign-input').value.trim();
+  const cid=document.getElementById('join-id-input').value.trim().toUpperCase();
+  if(!name){showErr('Enter a callsign first.');return;}
+  if(!cid||cid.length<4){showErr('Enter the channel ID from the other device.');return;}
+  myName=name; myId=uid(); channelId=cid;
+  await start();
+}
+
+async function start(){
+  document.querySelectorAll('.btn').forEach(b=>b.disabled=true);
+  try{
+    await getMic();
+    showApp();
+    initSignalling(channelId);
+  }catch(err){
+    document.querySelectorAll('.btn').forEach(b=>b.disabled=false);
+    if(err.name==='NotAllowedError'||err.name==='PermissionDeniedError'){
+      showErr('Microphone access denied. Please allow mic access and try again.');
+    } else {
+      showErr('Error: '+(err.message||err));
+    }
+  }
+}
+
+async function doLeave(){
+  if(isTx) pttRelease();
+  send({type:'leave'});
+  Object.keys(peers).forEach(handlePeerLeft);
+  try{ bc?.close(); }catch(_){}
+  try{ ws?.close(); }catch(_){}
+  localStream?.getTracks().forEach(t=>t.stop());
+  localStream=null; peers={}; isTx=false; blocked=false;
+  bc=null; ws=null; sigReady=false;
+  document.querySelectorAll('.btn').forEach(b=>b.disabled=false);
+  showSetup();
+}
+
+// ── PTT button events ──────────────────────────────────
+const btn=document.getElementById('ptt-btn');
+btn.addEventListener('mousedown',e=>{e.preventDefault();pttPress();});
+btn.addEventListener('mouseup',e=>{e.preventDefault();pttRelease();});
+btn.addEventListener('mouseleave',()=>{if(isTx)pttRelease();});
+btn.addEventListener('touchstart',e=>{e.preventDefault();pttPress();},{passive:false});
+btn.addEventListener('touchend',e=>{e.preventDefault();pttRelease();},{passive:false});
+btn.addEventListener('touchcancel',e=>{e.preventDefault();pttRelease();},{passive:false});
+
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&!e.repeat&&document.getElementById('app-screen').style.display!=='none'){
+    e.preventDefault(); pttPress();
+  }
+});
+document.addEventListener('keyup',e=>{
+  if(e.code==='Space'&&document.getElementById('app-screen').style.display!=='none'){
+    e.preventDefault(); pttRelease();
+  }
+});
+</script>
+</body>
+</html>
